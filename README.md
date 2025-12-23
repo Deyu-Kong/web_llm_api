@@ -1,8 +1,11 @@
-# Context.md
+# Web-LLM 
+
+![alt text](https://img.shields.io/badge/Python-3.12+-blue.svg)
+![alt text](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 ## 📋 项目概述
 
-WebLLM API 通过浏览器自动化技术（DrissionPage），将各大网页版 LLM 服务封装为统一的本地 API。无需官方 API Key，直接复用浏览器登录态，支持 OpenAI SDK 无缝调用。
+WebLLM API 通过浏览器自动化技术（DrissionPage），将各大网页版 LLM 服务封装为统一的 API。无需官方 API Key，直接复用浏览器登录态，支持 OpenAI SDK 无缝调用。
 
 ### 核心特性
 
@@ -42,6 +45,30 @@ python main.py
 ```
 
 ---
+
+## 🎯 扩展指南
+
+### 添加新的 LLM 平台适配器
+
+1. **创建文件**: `adapters/xxx_bot.py`
+2. **继承基类**: BaseBot
+3. **实现方法**: `activate()`, `ask()`, `new_chat()`
+4. **注册路由**: 在 `main.py` 添加对应 API 路由
+5. **更新导出**: 在 `adapters/__init__.py` 添加导出
+
+
+## ⚠️ 注意事项
+
+### 前置要求
+1. **手动登录**: 启动服务前需在浏览器中登录对应平台
+2. **配置修改**: 首次使用修改 `config.py` 中的路径配置
+3. **默认配置**：部分网页存在默认配置（如深度思考、网页搜索选项），新标签页会继承
+
+### 并发限制
+- 每种模型默认最多 3 个并发标签页（可在 TabPoolManager 中调整）。
+- 避免较多并发量，防止风控。
+- 超过限制的请求会等待可用标签页。
+
 
 ## 🏗️ 项目架构
 
@@ -186,30 +213,5 @@ python main.py
 
 ---
 
-## 🎯 扩展指南
-
-### 添加新的 LLM 平台适配器
-
-1. **创建文件**: `adapters/xxx_bot.py`
-2. **继承基类**: BaseBot
-3. **实现方法**: `activate()`, `ask()`, `new_chat()`
-4. **注册路由**: 在 `main.py` 添加对应 API 路由
-5. **更新导出**: 在 `adapters/__init__.py` 添加导出
-
-
-## ⚠️ 注意事项
-
-### 前置要求
-1. **手动登录**: 启动服务前需在浏览器中登录对应平台
-2. **配置修改**: 首次使用修改 `config.py` 中的路径配置
-3. **默认配置**：部分网页存在默认配置（如深度思考、网页搜索选项），新标签页会继承
-
-### 并发限制
-每种模型默认最多 3 个并发标签页（可在 TabPoolManager 中调整）
-超过限制的请求会等待可用标签页
-
----
-
 - **最后更新**: 2025-12-23
-
 - **维护者**: kdy 
