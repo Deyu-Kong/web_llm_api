@@ -3,14 +3,15 @@
 ## 📋 项目概述
 
 **项目名称**: WebLLM / Pantheon API  
-**版本**: v0.1.0  
-**核心功能**: 通过浏览器自动化技术（DrissionPage）将网页版 LLM 封装为本地 RESTful API
+**版本**: v0.3.0  
+**核心功能**: 通过浏览器自动化技术（DrissionPage）将网页版 LLM 封装为本地 RESTful API，并支持 **OpenAI 兼容协议**。
 
 ### 技术栈
 - **Web 自动化**: DrissionPage (Chrome DevTools Protocol)
 - **API 框架**: FastAPI + Uvicorn
 - **数据验证**: Pydantic
 - **语言版本**: Python 3.12+
+- **兼容协议**: OpenAI API Standard
 
 ---
 
@@ -19,11 +20,18 @@
 ```
 WebLLM/
 ├── adapters/           # 适配器层 - 各 LLM 平台的具体实现
-├── core/              # 核心层 - 公共逻辑（预留扩展）
-├── config.py          # 配置管理
-├── main.py            # API 服务入口
-├── test.py            # 测试脚本
-└── requirements.txt   # 依赖声明
+│   ├── base_bot.py     # 抽象基类
+│   ├── kimi_bot.py     # Kimi 适配器
+│   ├── lmarena_bot.py  # LMArena 适配器 (支持多模型)
+│   └── __init__.py
+├── core/               # 核心层 - 公共逻辑（预留扩展）
+├── tests/              # 测试模块
+│   ├── test_kimi.py    # Kimi 接口测试
+│   ├── test_lmarena.py # LMArena 接口测试
+│   └── test_openai.py  # OpenAI SDK 兼容性测试
+├── config.py           # 配置管理
+├── main.py             # API 服务入口
+└── requirements.txt    # 依赖声明
 ```
 
 ---
@@ -36,51 +44,30 @@ WebLLM/
 **职责**:
 - FastAPI 应用初始化和配置
 - 浏览器连接管理（启动时连接 Chrome 调试端口）
-- Bot 实例化和生命周期管理
-- RESTful API 路由定义
+- Bot 实例化和生命周期管理 (KimiBot, LMArenaBot)
+- **路由分发**: 根据模型名称将请求路由到对应的 Bot
+- **API 定义**: 提供原生接口和 OpenAI 兼容接口
 
 **关键路由**:
-- `GET /` - 服务状态和可用模型列表
-- `GET /health` - 健康检查
-- `POST /v1/chat/kimi` - Kimi 对话接口
+- `GET /v1/models` - 获取可用模型列表 (OpenAI 格式)
+- `POST /v1/chat/completions` - **OpenAI 兼容对话接口**
+- `POST /v1/chat/kimi` - Kimi 原生接口
+- `POST /v1/chat/lmarena` - LMArena 原生接口
 
 **启动流程**:
-1. 读取配置（Chrome 端口、用户数据目录）
-2. 连接到已启动的 Chrome 调试端口（9222）
-3. 初始化 KimiBot 实例
-4. 启动 FastAPI 服务（默认端口 8000）
+1. 读取配置
+2. 连接 Chrome 调试端口 (9222)
+3. 初始化所有 Bot 实例
+4. 启动 uvicorn 服务
 
 ---
 
 #### `config.py` - 全局配置文件
 **职责**: 集中管理所有配置项
 
-**配置项**:
-- `CHROME_PORT`: Chrome 远程调试端口（默认 9222）
-- `CHROME_USER_DATA_DIR`: Chrome 用户数据目录路径
-- `KIMI_URL`: Kimi 平台网址
-- `STABLE_WAIT_TIME`: AI 回复稳定检测时间（2s）
-- `CHECK_INTERVAL`: 回复检测间隔（0.5s）
-- `MAX_WAIT_TIME`: 最大等待超时（120s）
-
-**修改建议**:
-- 首次使用需修改 `CHROME_USER_DATA_DIR` 为实际路径
-- 根据网络情况调整超时参数
-
----
-
-#### `test.py` - 集成测试脚本
-**职责**: 验证 API 服务是否正常工作
-
-**测试用例**:
-1. `test_health()` - 健康检查接口测试
-2. `test_kimi_chat()` - Kimi 对话功能测试
-
-**使用方法**:
-```bash
-# 确保 main.py 已启动后执行
-python test.py
-```
+**新增配置**:
+- `LMARENA_URL`: LMArena 直连模式网址
+- `DEFAULT_LMARENA_MODEL`: LMArena 的默认模型名称
 
 ---
 
@@ -90,6 +77,7 @@ python test.py
 - `fastapi>=0.110.0` - Web 框架
 - `uvicorn>=0.27.0` - ASGI 服务器
 - `pydantic>=2.7.0` - 数据验证
+- `openai>=1.0.0` - 用于测试 SDK 兼容性
 
 ---
 
@@ -110,21 +98,18 @@ new_chat() -> bool          # 开启新对话（清除上下文）
 ---
 
 #### `kimi_bot.py` - Kimi 平台适配器
-**职责**: 实现 Kimi (moonshot.cn) 的具体交互逻辑
+实现 Kimi 网页版的交互逻辑，包含输入框定位和回复等待。
 
-**核心方法**:
-- `activate()` - 查找或打开 Kimi 标签页
-- `ask(query)` - 完整对话流程
-  1. 定位输入框（`_find_input_box`）
-  2. 输入问题 + 回车发送
-  3. 等待回复完成（`_wait_for_response`）
-  4. 提取回答文本（`_get_last_answer`）
-- `new_chat()` - 点击"新对话"按钮或刷新页面
-
-**技术细节**:
-- 使用多种 CSS 选择器策略提高鲁棒性
-- 基于文本稳定性检测回复是否完成
-- 详细的日志输出便于调试
+#### `lmarena_bot.py` - LMArena 适配器 (✨新增)
+**职责**: 实现 lmarena.ai 的交互，支持动态切换模型。
+**核心功能**:
+- **模型选择 (`_select_model`)**: 
+  - 使用多种策略 (XPath, CSS, 文本匹配) 精确定位 Combobox 按钮。
+  - 支持 JS 点击和模拟操作，解决元素遮挡问题。
+- **回复解析 (`_get_last_answer`)**: 
+  - 同时提取 **思考过程 (Thought)** 和 **最终回答 (Answer)**。
+  - 返回结构化字典 `{"thought": "...", "answer": "..."}`。
+- **多模型支持**: 允许在运行时通过下拉菜单切换模型。
 
 ---
 
@@ -170,22 +155,23 @@ __all__ = ["BaseBot", "KimiBot"]
 启动 FastAPI 服务（8000 端口）
 ```
 
-### 2. API 调用流程（以 Kimi 为例）
+### 2. API 调用流程（以 OpenAI API 为例）
 ```
-客户端 POST /v1/chat/kimi
+客户端 (OpenAI SDK)
   ↓
-FastAPI 接收请求（ChatRequest）
+POST /v1/chat/completions
   ↓
-KimiBot.activate() - 激活标签页
+main.py: parse_model_name() 解析模型前缀
   ↓
-KimiBot.ask(query)
-  ├─ _find_input_box() - 定位输入框
-  ├─ 输入问题 + 回车
-  ├─ _wait_for_response() - 等待回复
-  │   └─ _get_last_answer() - 轮询检测
-  └─ 返回回答文本
+main.py: route_to_bot() 分发请求
+  ├─ case "kimi": 调用 KimiBot.ask()
+  └─ case "lmarena": 调用 LMArenaBot.ask(model_name="...")
+       ↓
+     LMArenaBot: 检查当前模型 -> 下拉切换模型 (如果需要) -> 提问 -> 获取(思考+回答)
+       ↓
+     封装为 OpenAI ChatCompletionChunk 格式
   ↓
-封装为 ChatResponse 返回
+返回 JSON 响应
 ```
 
 ---
@@ -209,44 +195,16 @@ KimiBot.ask(query)
 4. **注册路由**: 在 `main.py` 添加对应 API 路由
 5. **更新导出**: 在 `adapters/__init__.py` 添加导出
 
-### 参考 KimiBot 的实现要点：
-- 使用多种选择器策略提高兼容性
-- 基于文本稳定性判断回复完成
-- 完善的错误处理和日志输出
-- 支持 `new_chat` 参数控制对话上下文
-
----
 
 ## ⚠️ 注意事项
 
 ### 前置要求
-1. **Chrome 调试模式启动**:
-   ```bash
-   chrome.exe --remote-debugging-port=9222 --user-data-dir="D:\chrome_WebLLM_profile"
-   ```
-2. **手动登录**: 启动服务前需在浏览器中登录对应平台
-3. **配置修改**: 首次使用修改 `config.py` 中的路径配置
+1. **手动登录**: 启动服务前需在浏览器中登录对应平台
+2. **配置修改**: 首次使用修改 `config.py` 中的路径配置
 
 ### 常见问题
 - **连接失败**: 检查 Chrome 是否以调试模式启动
-- **找不到输入框**: 确认已登录且在对话页面
 - **回复超时**: 调整 `MAX_WAIT_TIME` 或检查网络
-
----
-
-## 📝 开发建议
-
-### 给 LLM 的提示
-1. **修改现有 Bot**: 重点关注选择器定位逻辑和等待机制
-2. **添加新功能**: 优先在 `core/` 模块中实现公共逻辑
-3. **调试问题**: 查看控制台日志中的 `[BotName]` 标记
-4. **性能优化**: 减少不必要的 `time.sleep()`，使用显式等待
-
-### 代码规范
-- 使用类型注解（`-> bool`, `-> str`）
-- 添加详细的日志输出（包含 emoji 标记）
-- 异常处理使用 `try-except` 并打印堆栈
-- 选择器优先级：data-testid > class > tag
 
 ---
 
@@ -258,6 +216,6 @@ KimiBot.ask(query)
 
 ---
 
-**最后更新**: 2024年 (基于提供的代码快照)  
-**维护者**: 项目开发者  
+**最后更新**: 2025-12-23
+**维护者**: kdy 
 **许可**: 未指定
