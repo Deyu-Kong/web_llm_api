@@ -1,4 +1,4 @@
-# Web-LLM 
+# Web-LLM API
 
 ![alt text](https://img.shields.io/badge/Python-3.12+-blue.svg)
 ![alt text](https://img.shields.io/badge/License-MIT-yellow.svg)
@@ -26,6 +26,14 @@ WebLLM API 通过浏览器自动化技术（DrissionPage），将各大网页版
 | 数据验证 | Pydantic v2 | 类型安全的数据模型 |
 | 并发管理 | ThreadPoolExecutor | 多标签页并行处理 |
 | 运行环境 | Python 3.12+ | 最低版本要求 |
+
+### 支持的模型标识
+| 模型标识 | 平台 | 说明 |
+| --- | --- | --- |
+| kimi | Kimi | Kimi-K2 |
+| deepseek | DeepSeek | DeepSeek，支持深度思考 |
+| yuanbao  | 腾讯元宝 | 默认也是DeepSeek |
+| lmarena:<name> | LMArena | 自行指定模型，如 gemini-3-pro、gpt-5.2等 |
 
 ---
 
