@@ -15,7 +15,7 @@ from DrissionPage import ChromiumPage, ChromiumOptions
 import sys
 
 from config import CHROME_PORT, CHROME_USER_DATA_DIR, DEFAULT_LMARENA_MODEL
-from adapters import KimiBot, LMArenaBot
+from adapters import KimiBot, LMArenaBot, YuanbaoBot, DeepSeekBot
 
 # ============== FastAPI 初始化 ==============
 app = FastAPI(
@@ -28,6 +28,8 @@ app = FastAPI(
 browser = None
 kimi_bot = None
 lmarena_bot = None
+yuanbao_bot = None  # 新增
+deepseek_bot = None  # 新增
 
 # ============== OpenAI 兼容数据模型 ==============
 
@@ -78,6 +80,17 @@ class ModelListResponse(BaseModel):
 
 # ============== 原有数据模型 ==============
 
+# ============== 数据模型（新增）==============
+class YuanbaoRequest(BaseModel):
+    query: str
+    new_chat: Optional[bool] = False
+
+class DeepSeekRequest(BaseModel):
+    query: str
+    new_chat: Optional[bool] = False
+
+
+
 class ChatRequest(BaseModel):
     query: str
     new_chat: Optional[bool] = False  # 是否开启新对话
@@ -119,6 +132,10 @@ def parse_model_name(model: str) -> tuple:
         return ("lmarena", None)
     elif model.startswith("kimi"):
         return ("kimi", None)
+    elif model.startswith("yuanbao") or model.startswith("元宝") or model.startswith("tencent"):
+        return ("yuanbao", None)
+    elif model.startswith("deepseek") or model.startswith("ds"):
+        return ("deepseek", None)
     else:
         # 默认尝试作为 lmarena 的模型名
         return ("lmarena", model)
@@ -128,7 +145,7 @@ def route_to_bot(model: str, query: str, new_chat: bool = False) -> dict:
     根据模型名称路由到对应的 bot
     返回: {"model": str, "thought": str, "answer": str}
     """
-    global kimi_bot, lmarena_bot
+    global kimi_bot, lmarena_bot, yuanbao_bot, deepseek_bot
     
     bot_type, specific_model = parse_model_name(model)
     print(f"[Router] 解析模型: {model} -> bot_type={bot_type}, specific_model={specific_model}")
@@ -146,11 +163,7 @@ def route_to_bot(model: str, query: str, new_chat: bool = False) -> dict:
         if answer.startswith("Error:"):
             raise HTTPException(status_code=500, detail=answer)
         
-        return {
-            "model": "kimi",
-            "thought": "",
-            "answer": answer
-        }
+        return {"model": "kimi", "thought": "", "answer": answer}
     
     elif bot_type == "lmarena":
         if lmarena_bot is None:
@@ -171,6 +184,44 @@ def route_to_bot(model: str, query: str, new_chat: bool = False) -> dict:
             "answer": result["answer"]
         }
     
+    elif bot_type == "yuanbao":
+        if yuanbao_bot is None:
+            raise HTTPException(status_code=503, detail="腾讯元宝机器人未初始化")
+        
+        if new_chat:
+            yuanbao_bot.new_chat()
+        
+        yuanbao_bot.activate()
+        result = yuanbao_bot.ask(query)
+        
+        if result["answer"].startswith("Error:"):
+            raise HTTPException(status_code=500, detail=result["answer"])
+        
+        return {
+            "model": "yuanbao",
+            "thought": result.get("thought", ""),
+            "answer": result["answer"]
+        }
+    
+    elif bot_type == "deepseek":
+        if deepseek_bot is None:
+            raise HTTPException(status_code=503, detail="DeepSeek 机器人未初始化")
+        
+        if new_chat:
+            deepseek_bot.new_chat()
+        
+        deepseek_bot.activate()
+        result = deepseek_bot.ask(query)
+        
+        if result["answer"].startswith("Error:"):
+            raise HTTPException(status_code=500, detail=result["answer"])
+        
+        return {
+            "model": "deepseek",
+            "thought": result.get("thought", ""),
+            "answer": result["answer"]
+        }
+    
     else:
         raise HTTPException(status_code=400, detail=f"不支持的模型: {model}")
 
@@ -178,7 +229,7 @@ def route_to_bot(model: str, query: str, new_chat: bool = False) -> dict:
 @app.on_event("startup")
 def startup_event():
     """服务启动时连接浏览器"""
-    global browser, kimi_bot, lmarena_bot
+    global browser, kimi_bot, lmarena_bot, yuanbao_bot, deepseek_bot
     
     print("=" * 50)
     print("🚀 Pantheon API v0.1 启动中...")
@@ -211,6 +262,12 @@ def startup_event():
         lmarena_bot = LMArenaBot(browser, model_name=DEFAULT_LMARENA_MODEL)
         print("✅ LMArena 机器人初始化完成")
         
+        yuanbao_bot = YuanbaoBot(browser)
+        print("✅ 腾讯元宝机器人初始化完成")
+        
+        deepseek_bot = DeepSeekBot(browser)
+        print("✅ DeepSeek 机器人初始化完成")
+        
         print("\n" + "=" * 50)
         print("✅ 服务启动成功！")
         print("=" * 50)
@@ -222,6 +279,8 @@ def startup_event():
         print("   - lmarena")
         print("   - lmarena:claude-opus-4-5-20251101-thinking-32k")
         print("   - lmarena:gemini-3-pro")
+        print("   - yuanbao (腾讯元宝)")
+        print("   - deepseek")
         print("=" * 50 + "\n")
         
     except Exception as e:
@@ -249,6 +308,8 @@ def list_models():
         ModelInfo(id="lmarena:claude-opus-4-5-20251101-thinking-32k", created=current_time, owned_by="lmarena"),
         ModelInfo(id="lmarena:gpt-4o", created=current_time, owned_by="lmarena"),
         ModelInfo(id="lmarena:gemini-2.5-pro", created=current_time, owned_by="lmarena"),
+        ModelInfo(id="yuanbao", created=current_time, owned_by="tencent"),
+        ModelInfo(id="deepseek", created=current_time, owned_by="deepseek"),
     ]
     
     return ModelListResponse(data=models)
@@ -349,20 +410,21 @@ def chat_completions(
     return response
 
 # ============== 原有 API（保留兼容） ==============
-
+# ============== 更新根路径响应 ==============
 @app.get("/")
 def root():
-    """根路径 - 状态检查"""
     return {
         "status": "running",
-        "version": "0.1.0",
-        "available_models": ["kimi", "lmarena", "lmarena:<model_name>"],
+        "version": "0.2.0",
+        "available_models": ["kimi", "lmarena", "lmarena:<model>", "yuanbao", "deepseek"],
         "openai_compatible": True,
         "endpoints": {
             "openai": "/v1/chat/completions",
             "models": "/v1/models",
             "kimi": "/v1/chat/kimi",
-            "lmarena": "/v1/chat/lmarena"
+            "lmarena": "/v1/chat/lmarena",
+            "yuanbao": "/v1/chat/yuanbao",
+            "deepseek": "/v1/chat/deepseek"
         }
     }
 
@@ -446,6 +508,72 @@ def chat_with_lmarena(request: LMArenaRequest):
         
         return LMArenaResponse(
             model=f"lmarena-{current_model}",
+            thought=result["thought"],
+            answer=result["answer"],
+            status="success"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# ============== 新增原生 API 路由 ==============
+@app.post("/v1/chat/yuanbao", response_model=LMArenaResponse)
+def chat_with_yuanbao(request: YuanbaoRequest):
+    """
+    与腾讯元宝对话
+    """
+    global yuanbao_bot
+    
+    if yuanbao_bot is None:
+        raise HTTPException(status_code=503, detail="腾讯元宝机器人未初始化")
+    
+    try:
+        if request.new_chat:
+            yuanbao_bot.new_chat()
+        
+        yuanbao_bot.activate()
+        result = yuanbao_bot.ask(request.query)
+        
+        if result["answer"].startswith("Error:"):
+            raise HTTPException(status_code=500, detail=result["answer"])
+        
+        return LMArenaResponse(
+            model="yuanbao",
+            thought=result["thought"],
+            answer=result["answer"],
+            status="success"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/v1/chat/deepseek", response_model=LMArenaResponse)
+def chat_with_deepseek(request: DeepSeekRequest):
+    """
+    与 DeepSeek 对话
+    """
+    global deepseek_bot
+    
+    if deepseek_bot is None:
+        raise HTTPException(status_code=503, detail="DeepSeek 机器人未初始化")
+    
+    try:
+        if request.new_chat:
+            deepseek_bot.new_chat()
+        
+        deepseek_bot.activate()
+        result = deepseek_bot.ask(request.query)
+        
+        if result["answer"].startswith("Error:"):
+            raise HTTPException(status_code=500, detail=result["answer"])
+        
+        return LMArenaResponse(
+            model="deepseek",
             thought=result["thought"],
             answer=result["answer"],
             status="success"

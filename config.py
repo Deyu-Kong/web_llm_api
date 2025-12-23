@@ -10,6 +10,8 @@ CHROME_USER_DATA_DIR = r"C:\Users\dell\AppData\Local\Google\Chrome\User Data"
 # 各平台网址
 KIMI_URL = "https://www.kimi.com/"
 LMARENA_URL = "https://lmarena.ai/zh/c/new?mode=direct"  # 新增
+YUANBAO_URL = "https://yuanbao.tencent.com/chat"
+DEEPSEEK_URL = "https://chat.deepseek.com"
 
 # 响应检测配置
 STABLE_WAIT_TIME = 2.0      # 文本稳定多少秒后认为生成完成
