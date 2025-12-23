@@ -1,4 +1,8 @@
 # adapters/yuanbao_bot.py
+"""
+腾讯元宝适配器 - 支持多标签页并发
+"""
+
 import time
 from .base_bot import BaseBot
 from config import STABLE_WAIT_TIME, CHECK_INTERVAL, MAX_WAIT_TIME
@@ -10,41 +14,46 @@ YUANBAO_URL = "https://yuanbao.tencent.com/chat"
 class YuanbaoBot(BaseBot):
     """
     腾讯元宝 (yuanbao.tencent.com) 网页机器人
+    支持多标签页并发
     """
     
-    def __init__(self, page):
-        super().__init__(page)
+    def __init__(self, page=None, tab=None):
+        """
+        初始化元宝 Bot
+        
+        Args:
+            page: DrissionPage 浏览器实例（单例模式）
+            tab: 外部提供的标签页（多例/并发模式）
+        """
+        super().__init__(page, tab)
         self.name = "Yuanbao"
         self.url = YUANBAO_URL
-        self.tab = None
 
     def activate(self) -> bool:
         """激活或打开腾讯元宝标签页"""
         try:
-            tabs = self.page.get_tabs()
-            print(f"[{self.name}] 当前浏览器共有 {len(tabs)} 个标签页")
-            
-            # 查找元宝标签页
-            target_tab = None
-            for tab in tabs:
-                print(f"[{self.name}] 检查标签页: {tab.url}")
-                if "yuanbao.tencent.com" in tab.url:
-                    target_tab = tab
-                    break
-            
-            if target_tab:
-                self.tab = target_tab
+            if self.tab:
                 self.tab.set.activate()
-                print(f"[{self.name}] ✅ 已激活现有元宝标签页")
+                if "yuanbao.tencent.com" not in self.tab.url:
+                    self.tab.get(self.url)
+                    time.sleep(2)
                 return True
-            else:
-                print(f"[{self.name}] 未找到元宝标签页，正在打开...")
+            
+            if self.page:
+                tabs = self.page.get_tabs()
+                
+                for tab in tabs:
+                    if "yuanbao.tencent.com" in tab.url:
+                        self.tab = tab
+                        self.tab.set.activate()
+                        return True
+                
                 self.tab = self.page.latest_tab
                 self.tab.get(self.url)
-                time.sleep(3)
-                print(f"[{self.name}] ✅ 已打开腾讯元宝")
+                time.sleep(2)
                 return True
             
+            return False
         except Exception as e:
             print(f"[{self.name}] ❌ 激活失败: {e}")
             import traceback
@@ -105,8 +114,10 @@ class YuanbaoBot(BaseBot):
 
     def _get_last_answer(self) -> dict:
         """
-        获取最后一条回答，区分思考过程和最终回答
-        返回: {"thought": str, "answer": str}
+        获取最后一条回答
+        
+        Returns:
+            {"thought": "思考过程", "answer": "实际回答"}
         """
         if not self.tab:
             return {"thought": "", "answer": ""}
@@ -283,7 +294,7 @@ class YuanbaoBot(BaseBot):
         """开启新对话"""
         try:
             if not self.tab:
-                self.activate()
+                return False
             
             # 腾讯元宝的新对话按钮选择器
             new_chat_selectors = [
@@ -309,7 +320,7 @@ class YuanbaoBot(BaseBot):
                 except:
                     continue
             
-            # 找不到按钮就刷新页面
+            # 备选：刷新页面
             print(f"[{self.name}] 未找到新对话按钮，刷新页面...")
             self.tab.refresh()
             time.sleep(2)

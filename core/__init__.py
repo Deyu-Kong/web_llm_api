@@ -1,2 +1,5 @@
 # core/__init__.py
-# 预留给后续扩展
+
+from .tab_manager import TabPoolManager, TabInfo
+
+__all__ = ["TabPoolManager", "TabInfo"]
