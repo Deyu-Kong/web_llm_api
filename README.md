@@ -65,10 +65,6 @@ WebLLM/
 #### `config.py` - 全局配置文件
 **职责**: 集中管理所有配置项
 
-**新增配置**:
-- `LMARENA_URL`: LMArena 直连模式网址
-- `DEFAULT_LMARENA_MODEL`: LMArena 的默认模型名称
-
 ---
 
 #### `requirements.txt` - Python 依赖
@@ -111,24 +107,6 @@ new_chat() -> bool          # 开启新对话（清除上下文）
   - 返回结构化字典 `{"thought": "...", "answer": "..."}`。
 - **多模型支持**: 允许在运行时通过下拉菜单切换模型。
 
----
-
-#### `claude_bot.py` / `gpt_bot.py` - 待实现
-**状态**: 空文件（占位）  
-**计划**: 参考 `kimi_bot.py` 实现 Claude 和 ChatGPT 的适配器
-
----
-
-#### `__init__.py` - 模块导出
-**职责**: 统一导出接口，简化导入路径
-
-```python
-from .base_bot import BaseBot
-from .kimi_bot import KimiBot
-__all__ = ["BaseBot", "KimiBot"]
-```
-
----
 
 ### 3️⃣ **core/ - 核心模块（预留）**
 
@@ -201,21 +179,13 @@ main.py: route_to_bot() 分发请求
 ### 前置要求
 1. **手动登录**: 启动服务前需在浏览器中登录对应平台
 2. **配置修改**: 首次使用修改 `config.py` 中的路径配置
+3. **默认配置**：部分网页存在默认配置，例如DeepSeek、Yuanbao打开新页面时会自动集成之前的**深度思考**与**网页搜索**选项
 
 ### 常见问题
-- **连接失败**: 检查 Chrome 是否以调试模式启动
 - **回复超时**: 调整 `MAX_WAIT_TIME` 或检查网络
 
 ---
 
-## 🔗 相关文档
+- **最后更新**: 2025-12-23
 
-- **DrissionPage 文档**: https://drissionpage.cn/
-- **FastAPI 文档**: https://fastapi.tiangolo.com/
-- **API 调试界面**: http://127.0.0.1:8000/docs (Swagger UI)
-
----
-
-**最后更新**: 2025-12-23
-**维护者**: kdy 
-**许可**: 未指定
+- **维护者**: kdy 
